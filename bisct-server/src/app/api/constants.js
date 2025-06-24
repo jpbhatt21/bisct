@@ -8,7 +8,7 @@ export const projectsFile = "projects.json";
 let temp = {
 	users: {},
 	projects: {},
-} 
+};
 
 try {
 	temp.users = JSON.parse(fs.readFileSync(path.join(parentDir, usersFile), "utf8"));
@@ -21,7 +21,10 @@ try {
 }
 let users = temp.users;
 let projects = temp.projects;
-export const getProjects = () => ({ ...projects });
+export const getProjects = () => {
+	projects = JSON.parse(fs.readFileSync(path.join(parentDir, projectsSubdir, projectsFile), "utf8"));
+	return { ...projects };
+};
 export const setProjects = (val) => {
 	projects = val;
 	fs.writeFileSync(path.join(parentDir, projectsSubdir, projectsFile), JSON.stringify(projects), "utf8");
@@ -39,7 +42,7 @@ export const setUsers = (val) => {
 export function verify(token) {
 	let status = 401;
 	if (token) {
-		let verify= jwt.verify(token.value, process.env.JWT_SECRET);
+		let verify = jwt.verify(token.value, process.env.JWT_SECRET);
 		if (verify.exp * 1000 > Date.now()) {
 			if (users[verify.email] && users[verify.email].token == token.value) status = 200;
 			else if (Object.keys(users).length == 0) {
@@ -51,3 +54,19 @@ export function verify(token) {
 	}
 	return status;
 }
+export const defaultCompose = `version: '3.8'
+services:
+  app:
+    image: %uuid
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.app.rule=Host(\`%url\`)"
+      - "traefik.http.routers.app.entrypoints=web"
+      - "traefik.http.services.app.loadbalancer.server.port=%port"
+    networks:
+      - traefik
+
+networks:
+  traefik:
+    external: true
+`;

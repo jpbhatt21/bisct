@@ -1,5 +1,5 @@
 "use client";
-import { projectsAtom, store } from "@/utils/vars";
+import { defFont, projectsAtom, store } from "@/utils/vars";
 
 let focusTimeout: any = null;
 function Card(project: any) {
@@ -33,7 +33,7 @@ function Card(project: any) {
 		<div onClick={()=>{
             if(project.id[0] == "-") return 
             project.openProject(project.id)
-        }} key={project.id} className="w-56 h-20 bg-g1 rounded-md flex flex-col p-2  justify-center">
+        }} key={project.id} className="w-56 h-20 cursor-pointer bg-card hover:bg-hover duration-300 rounded-sm flex flex-col p-2  justify-center">
 			{project.name &&
 				(project.id[0] == "-" ? (
 					<input
@@ -56,10 +56,11 @@ function Card(project: any) {
 						autoFocus
 						type="text"
 						defaultValue={project.name}
-						className="px-2 py-1 font-semibold bg-transparent outline-g4 rounded-md focus:outline w-full"
+						className={defFont.className+" px-3 py-1 text-xl font-semibold bg-transparent duration-300 rounded-sm focus:outline w-full"}
 					/>
 				) : (
-					<div className="px-2 py-1 font-semibold">{project.name}</div>
+					<div 
+					className={defFont.className+" px-3 py-1 text-xl font-semibold"}>{project.name}</div>
 				))}
 			{project.desc &&
 				(project.id[0] == "-" ? (
@@ -81,10 +82,10 @@ function Card(project: any) {
 							}
 						}}
 						defaultValue={project.desc}
-						className="px-2 py-1 text-g5 text-base bg-transparent  whitespace-nowrap overflow-hidden text-ellipsis w-full outline-g4 rounded-md focus:outline"
+						className="px-3 text-muted-foreground text-sm bg-transparent  whitespace-nowrap overflow-hidden text-ellipsis w-full duration-300 rounded-sm focus:outline"
 					/>
 				) : (
-					<label className="px-2 py-1 text-base text-g5 whitespace-nowrap overflow-hidden text-ellipsis">{project.desc}</label>
+					<label className="px-3 text-sm text-muted-foreground whitespace-nowrap pointer-events-none overflow-hidden text-ellipsis">{project.desc}</label>
 				))}
 		</div>
 	);
