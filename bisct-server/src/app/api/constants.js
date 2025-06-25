@@ -76,8 +76,8 @@ export async function test() {
 	try {
 		fs.readFileSync(path.join(parentDir, "docker-compose.yaml"), "utf-8");
 		let cmdOP = await cmdOutput(spawn("docker", ["ps", "-a", "--filter", `name=bisct-traefik`, "--format", "json"], { cwd: ppath }));
-		if(cmdOP.length==0||JSON.parse(cmdOP).status!=="running"){
-			throw new Error("start traefik")
+		if (cmdOP.length == 0 || JSON.parse(cmdOP).status !== "running") {
+			throw new Error("start traefik");
 		}
 	} catch {
 		fs.writeFileSync(path.join(parentDir, "docker-compose.yaml"), traefikComposeYaml, "utf8");
@@ -104,7 +104,11 @@ export const addProject = (key, val) => {
 	projects[key] = val;
 	fs.writeFileSync(path.join(parentDir, projectsSubdir, projectsFile), JSON.stringify(projects), "utf8");
 };
-export const getUsers = () => ({ ...users });
+export const getUsers = () => {
+	users = JSON.parse(fs.readFileSync(path.join(parentDir, "users.json"), "utf8"));
+
+	return { ...users };
+};
 export const setUsers = (val) => {
 	users = val;
 	fs.writeFileSync(path.join(parentDir, usersFile), JSON.stringify(users), "utf8");
@@ -113,6 +117,7 @@ export const setUsers = (val) => {
 export function verify(token) {
 	let status = 401;
 	if (token) {
+		const users = getUsers()
 		let verify = jwt.verify(token.value, process.env.JWT_SECRET);
 		if (verify.exp * 1000 > Date.now()) {
 			if (users[verify.email] && users[verify.email].token == token.value) status = 200;
