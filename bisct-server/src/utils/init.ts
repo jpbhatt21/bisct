@@ -3,6 +3,7 @@
 import { navigatorAtom, projectsAtom, store } from "./vars";
 
 export async function main(): Promise<null> {
+	if (typeof window !== 'undefined')
 	fetch("/api/auth").then((res) => {
 		let location = window.location.pathname.split("?")[0];
 		let status = res.status;
