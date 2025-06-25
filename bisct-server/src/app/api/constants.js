@@ -57,13 +57,13 @@ let projects = {};
 
 export async function test() {
 	try {
-		users = JSON.parse(fs.readFileSync(path.join(parentDir, usersFile), "utf8"));
+		setUsers(JSON.parse(fs.readFileSync(path.join(parentDir, usersFile), "utf8")));
 	} catch {
 		fs.mkdirSync(path.join(parentDir, projectsSubdir), { recursive: true });
 		fs.writeFileSync(path.join(parentDir, usersFile), JSON.stringify({}), "utf8");
 	}
 	try {
-		projects = JSON.parse(fs.readFileSync(path.join(parentDir, projectsSubdir, projectsFile), "utf8"));
+		setProjects(JSON.parse(fs.readFileSync(path.join(parentDir, projectsSubdir, projectsFile), "utf8")));
 	} catch {
 		fs.writeFileSync(path.join(parentDir, projectsSubdir, projectsFile), JSON.stringify({}), "utf8");
 	}
@@ -75,12 +75,17 @@ export async function test() {
 	}
 	try {
 		fs.readFileSync(path.join(parentDir, "docker-compose.yaml"), "utf-8");
+		
+	} catch {
+		fs.writeFileSync(path.join(parentDir, "docker-compose.yaml"), traefikComposeYaml, "utf8");
+		
+	}
+	try{
 		let cmdOP = await cmdOutput(spawn("docker", ["ps", "-a", "--filter", `name=bisct-traefik`, "--format", "json"], { cwd: ppath }));
 		if (cmdOP.length == 0 || JSON.parse(cmdOP).status !== "running") {
 			throw new Error("start traefik");
 		}
-	} catch {
-		fs.writeFileSync(path.join(parentDir, "docker-compose.yaml"), traefikComposeYaml, "utf8");
+	}catch{
 		let proc = spawn("docker", ["compose", "up", "-d"], { cwd: parentDir });
 		proc.stdout.on("data", (data) => console.log(data.toString()));
 		proc.stderr.on("data", (data) => console.log(data.toString()));
@@ -117,7 +122,7 @@ export const setUsers = (val) => {
 export function verify(token) {
 	let status = 401;
 	if (token) {
-		const users = getUsers()
+		const users = getUsers();
 		let verify = jwt.verify(token.value, process.env.JWT_SECRET);
 		if (verify.exp * 1000 > Date.now()) {
 			if (users[verify.email] && users[verify.email].token == token.value) status = 200;
