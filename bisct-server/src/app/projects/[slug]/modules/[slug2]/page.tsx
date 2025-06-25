@@ -6,7 +6,9 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import Overview from "./Overview";
 import { Button } from "@/components/ui/button";
-import { BanIcon, PlayIcon, RefreshCwIcon, ReplyAllIcon, SquareIcon, StopCircleIcon, XIcon } from "lucide-react";
+import { BanIcon, EllipsisVerticalIcon, PlayIcon, RefreshCwIcon, ReplyAllIcon, SquareIcon, StopCircleIcon, XIcon } from "lucide-react";
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent,  DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
+
 const tabs = [
 	{ name: "Overview", url: "" },
 	{ name: "Env Vars", url: "?env" },
@@ -25,12 +27,29 @@ const tabs = [
 // };
 
 const statusOptions = {
-	undeployed: {
-		button: "Deploy",
-		icon: <PlayIcon fill="var(--success)" className="text-success" />,
+	unbuiltundeployed: {
+		button: "Build & Deploy",
+		icon: <PlayIcon className="fill-success text-success" />,
 		bgColor: "--selected",
 		color: "--foreground",
 		titleColor: "--foreground",
+		options: [],
+	},
+	building: {
+		button: "Cancel",
+		icon: <XIcon className="text-error" />,
+		bgColor: "--muted-error",
+		color: "--foreground",
+		titleColor: "--warning",
+		options: [],
+	},
+	undeployed: {
+		button: "Deploy",
+		icon: <PlayIcon className="text-success fill-success" />,
+		bgColor: "--selected",
+		color: "--foreground",
+		titleColor: "--foreground",
+		options: ["Remove", "Rebuild"],
 	},
 	deploying: {
 		button: "Cancel",
@@ -38,6 +57,23 @@ const statusOptions = {
 		bgColor: "--muted-error",
 		color: "--foreground",
 		titleColor: "--warning",
+		options: [],
+	},
+	running: {
+		button: "Stop",
+		icon: <SquareIcon className="text-error fill-error" />,
+		bgColor: "--muted-error",
+		color: "--foreground",
+		titleColor: "--success",
+		options: ["Pause", "Remove", "Restart", "Redeploy", "Rebuild & Redeploy"],
+	},
+	stopping: {
+		button: "Disabled",
+		icon: <BanIcon className="text-error" />,
+		bgColor: "--hover",
+		color: "--foreground",
+		titleColor: "--error",
+		options: [],
 	},
 	starting: {
 		button: "Cancel",
@@ -45,41 +81,47 @@ const statusOptions = {
 		bgColor: "--muted-error",
 		color: "--foreground",
 		titleColor: "--warning",
-	},
-	created: {
-		button: "Start",
-		icon: <PlayIcon fill="var(--success)" className="text-success" />,
-		bgColor: "--selected",
-		color: "--foreground",
-		titleColor: "--foreground",
-	},
-	running: {
-		button: "Stop",
-		icon: <SquareIcon fill="var(--error)" className="text-error" />,
-		bgColor: "--muted-error",
-		color: "--foreground",
-		titleColor: "--success",
-	},
-	stopping: {
-		button: "Disabled",
-		icon: <BanIcon className="text-error"/>,
-		bgColor: "--hover",
-		color: "--foreground",
-		titleColor: "--error",
-	},
-	exited: {
-		button: "Restart",
-		icon: <RefreshCwIcon className="text-warning" />,
-		bgColor: "--hover",
-		color: "--foreground",
-		titleColor: "--foreground",
+		options: [],
 	},
 	removing: {
 		button: "Disabled",
-		icon: <BanIcon className="text-error"/>,
+		icon: <BanIcon className="text-error" />,
+		bgColor: "--hover",
+		color: "--foreground",
+		titleColor: "--error",
+		options: [],
+	},
+	restarting: {
+		button: "Disabled",
+		icon: <BanIcon className="text-error" />,
 		bgColor: "--hover ",
 		color: "--foreground",
 		titleColor: "--error",
+		options: [],
+	},
+	stopped: {
+		button: "Start",
+		icon: <PlayIcon className="text-success fill-success" />,
+		bgColor: "--hover",
+		color: "--foreground",
+		titleColor: "--foreground",
+		options: ["Remove", "Restart", "Redeploy", "Rebuild & Redeploy"],
+	},
+	exited: {
+		button: "Start",
+		icon: <PlayIcon className="text-success fill-success" />,
+		bgColor: "--hover",
+		color: "--foreground",
+		titleColor: "--foreground",
+		options: ["Remove", "Redeploy", "Rebuild & Redeploy"],
+	},
+	paused: {
+		button: "Resume",
+		icon: <PlayIcon className="text-success fill-success" />,
+		bgColor: "--hover",
+		color: "--foreground",
+		titleColor: "--foreground",
+		options: ["Stop", "Remove", "Restart", "Redeploy", "Rebuild & Redeploy"],
 	},
 };
 function ModulesSlug() {
@@ -89,7 +131,7 @@ function ModulesSlug() {
 	const pid = pathname.split("/")[2];
 	const mid = pathname.split("/")[4];
 	const [module, setModule] = useState({} as any);
-	const status:keyof typeof statusOptions = module.status || "undeployed"; 
+	const status: keyof typeof statusOptions = module.status || "undeployed";
 	const [projects, setProjects] = useAtom(projectsAtom);
 	console.log(module, mid, query);
 	useEffect(() => {
@@ -124,44 +166,85 @@ function ModulesSlug() {
 		<>
 			<div className="w-full h-28 flex items-center gap-2 pr-8 justify-between">
 				<div className=" flex flex-col gap-1">
-					<label className={"h-10 flex items-center gap-2 text-3xl m-4 -mb-2 self-start " + lexFont.className}
-					style={{ color: "var(" + statusOptions[status]?.titleColor || "" + ")" }}
-					>{module?.name || "..."}<label className="text-sm">({module.status})</label></label>
-					<label className="h-10 flex items-center gap-2 text-muted-foreground text-lg m-4 mt-0 self-start">{module?.desc || "..."}</label>
-				</div>
-				<div className="flex flex-col gap-1">
-					{(module.status ) && (
+					{module.name ? (
 						<>
-							
+							<label className={"h-10 flex items-center gap-2 text-3xl m-4 -mb-2 self-start " + lexFont.className} style={{ color: "var(" + statusOptions[status]?.titleColor || "" + ")" }}>
+								{module.name}
+								<label className="text-sm">({module.status})</label>
+							</label>
+							<label className="h-10 flex items-center gap-2 text-muted-foreground text-lg m-4 mt-0 self-start">{module?.desc || "..."}</label>
+						</>
+					) : (
+						<>
+							<div className="h-10 bg-selected w-48 m-4 -mb-2 rounded-sm"></div>
+							<div className="h-6 bg-hover w-72 m-4 rounded-sm"></div>
+						</>
+					)}
+				</div>
+				<div className="flex gap-1">
+					{module.status ? (
+						<>
 							<Button
+								className=" w-32 h-10"
 								onClick={() => {
-									socket.emit("moduleReq", { pid, mid });
+									socket.emit("moduleReq", { pid, mid, req: statusOptions[status]?.button });
 								}}
 								style={{
 									backgroundColor: "var(" + statusOptions[status]?.bgColor || "" + ")",
 									color: "var(" + statusOptions[status]?.color || "" + ")",
 								}}>
-								{statusOptions[status]?.icon || ""}{statusOptions[status]?.button || "Disabled"}
+								{statusOptions[status]?.icon || ""}
+								{statusOptions[status]?.button || "Disabled"}
 							</Button>
+							{
+								statusOptions[status].options.length!==0 && <DropdownMenu>
+								<DropdownMenuTrigger className="min-w-5 h-10 bg-card rounded-sm hover:bg-hover duration-300">
+									<EllipsisVerticalIcon className="h-2/3 text-muted-foreground" />
+								</DropdownMenuTrigger>
+								<DropdownMenuContent className="w-24 mr-4">
+									{statusOptions[status]?.options?.map((option: string,i:number) => (
+										<>
+										<DropdownMenuItem
+											key={option}
+											className="text-sm"
+											onClick={() => {
+												socket.emit("moduleReq", { pid, mid, req: option });
+											}}>
+											{option}
+										</DropdownMenuItem>
+										{i+1!==statusOptions[status].options.length && <DropdownMenuSeparator/>}
+										</>
+									))}
+								</DropdownMenuContent>
+							</DropdownMenu>}
 						</>
+					) : (
+						<div className="bg-hover w-32 h-10 rounded-sm" />
 					)}
 				</div>
 			</div>
 			<div className="w-full h-full flex p-4 pt-0">
-				<Tabs className="w-full h-full gap-2" defaultValue="">
-					<TabsList className="w-fit h-10">
-						{tabs.map((tab: any) => (
-							<TabsTrigger value={tab.url} className={lexFont.className + " text-base"}>
-								{tab.name}
-							</TabsTrigger>
-						))}
-					</TabsList>
-					<TabsContent value="">
-						<Overview module={module} />
-					</TabsContent>
-					<TabsContent value="?env"></TabsContent>
-					<TabsContent value="?term"></TabsContent>
-				</Tabs>
+				{module.type ? (
+					<Tabs className="w-full h-full gap-2" defaultValue="">
+						<TabsList key="tablist" className="w-fit duration-300  h-10">
+							{tabs.map((tab: any) => (
+								<TabsTrigger value={tab.url} className={lexFont.className + " text-base"}>
+									{tab.name}
+								</TabsTrigger>
+							))}
+						</TabsList>
+						<TabsContent value="">
+							<Overview module={module} />
+						</TabsContent>
+						<TabsContent value="?env"></TabsContent>
+						<TabsContent value="?term"></TabsContent>
+					</Tabs>
+				) : (
+					<div className="flex flex-col gap-2 w-full h-full">
+						<div key="tablist" className="w-96 h-10  duration-300 rounded-sm bg-card" />
+						<div className="flex flex-col w-full rounded-sm h-full bg-card"></div>
+					</div>
+				)}
 			</div>
 		</>
 	);

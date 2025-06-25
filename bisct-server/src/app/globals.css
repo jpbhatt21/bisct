@@ -244,8 +244,8 @@ button{
 	--secondary-foreground: #8f93a2;
 	--muted: #c3e88d;
 	--muted-foreground: #8f93a2;
-	--accent: #f78c6c;
-	--accent-foreground: #0f111a;
+	--accent: #22252e;
+	--accent-foreground: #bcc1d4;
 	--destructive: #f07178;
 	--border: rgba(255, 255, 255, 0.1);
 	--input: rgba(255, 255, 255, 0.15);

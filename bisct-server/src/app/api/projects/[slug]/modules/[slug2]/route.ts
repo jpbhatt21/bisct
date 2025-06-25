@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import fs from "fs";
-import { getProjects, parentDir, projectsSubdir, verify } from "../../../../constants";
+import { getProjects, getStatus, parentDir, projectsSubdir, verify } from "../../../../constants";
 import { NextResponse } from "next/server";
 import path from "path";
 import { spawn } from "child_process";
@@ -21,6 +21,15 @@ async function comm(child: any) {
 	}
 	return op;
 }
+let stateMap:any={
+	created : "undeployed",
+	running: "running",
+	paused :"paused",
+	restarting: "restarting",
+	removing: "removing",
+	exited:"exited",
+	dead:"undeployed",
+}
 export async function GET(request: Request, { params }: any) {
 	params = await params;
 	let pid = params.slug;
@@ -28,32 +37,20 @@ export async function GET(request: Request, { params }: any) {
 	let token = (await cookies()).get("token");
 	let status = verify(token);
 	let data: any = "ok";
-	let module = {};
+	let module:any = {};
 	if (status == 200 || true) {
 		const projects = getProjects();
 		if (projects[pid as keyof typeof projects]) {
 			const ppath = path.join(parentDir, projectsSubdir, pid);
 			const modules = JSON.parse(fs.readFileSync(path.join(ppath, "modules.json"), { encoding: "utf-8" }));
-			if (modules[mid as keyof typeof modules]) {
-				data = (await comm(spawn("docker", ["ps", "-a", "--filter", `name=${mid}`, "--format", "{{json .}}"], { cwd: ppath })))
-					.split("\n")
-					.filter((x: any) => x.trim().length > 0)
-					.map((x: any) => JSON.parse(x));
-				data = data.map((x: any) => ({
-					name: x.Names.replace(`${mid}-`, ""),
-					status: x.State,
-					uptime: x.RunningFor,
-				}));
-				if (modules[mid as keyof typeof modules].status == "deploying") {
-				} else if (data.length == 0) {
-					modules[mid as keyof typeof modules].status = "undeployed";
-				} else {
-					modules[mid as keyof typeof modules].status = data[0].status;
-				}
+			if (modules[mid]) {
+				const {cmdOP,status} =await getStatus(mid,modules[mid].status,ppath)
+				data=cmdOP
+				modules[mid].status=status
 				fs.writeFileSync(path.join(ppath, "modules.json"), JSON.stringify(modules, null, 2), { encoding: "utf-8" });
 				module = {
 					id: mid,
-					...modules[mid as keyof typeof modules],
+					...modules[mid],
 				};
 			} else {
 				status = 404;

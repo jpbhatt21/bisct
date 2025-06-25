@@ -1,4 +1,5 @@
 "use client";
+import SkeletonCard from "@/components/skeletons/ProjectCardSkeleton";
 import { Button } from "@/components/ui/button";
 import { lexFont, projectsAtom } from "@/utils/vars";
 import { useAtom } from "jotai";
@@ -6,7 +7,7 @@ import { PlusIcon } from "lucide-react";
 import dynamic from "next/dynamic";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-const DynamicProjects = dynamic(() =>import ("./content"),{ssr:false,loading: () => <div className="w-full h-full flex items-center justify-center">Loading...</div>});
+const DynamicProjects = dynamic(() =>import ("./content"),{ssr:false,loading: () => <SkeletonCard/>});
 
 function PageSlug() {
 	let pid = usePathname().split("/")[2];

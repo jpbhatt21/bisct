@@ -1,6 +1,6 @@
 import { createServer } from "node:http";
 import next from "next";
-import { parentDir, projectsSubdir } from "./src/app/api/constants.js";
+import { getStatus, parentDir, projectsSubdir, test } from "./src/app/api/constants.js";
 import { Server } from "socket.io";
 import { spawn } from "node:child_process";
 import * as os from "node:os";
@@ -26,7 +26,8 @@ networks:
   traefik:
     external: true
 `;
-const busy = {};
+const kill={}
+test()
 app.prepare().then(() => {
 	const httpServer = createServer((req, res) => {
 		// Handle your custom routes first
@@ -45,7 +46,7 @@ app.prepare().then(() => {
 
 	io.on("connection", (socket) => {
 		console.log("Socket connected");
-		async function comm(child) {
+		async function comm(child,mid) {
 			let finished = 0;
 			child.stdout.on("data", (data) => {
 				socket.emit("comm", data.toString());
@@ -66,8 +67,23 @@ app.prepare().then(() => {
 			});
 			while (finished == 0) {
 				await new Promise((resolve) => setTimeout(resolve, 100));
+				if(kill[mid])
+				{	child.kill()
+
+					finished=-1;
+				}
+
 			}
 			return finished;
+		}
+		function updateStatus(pid, mid, modules, ppath, status) {
+			modules[mid].status = status;
+			fs.writeFileSync(path.join(ppath, "modules.json"), JSON.stringify(modules, null, 2), { encoding: "utf-8" });
+			socket.emit("statusModUpd", { pid, mid, status: modules[mid].status });
+		}
+		async function runCommand(str,cwd,mid) {
+			str = str.split(" ");
+			return comm(spawn(str[0], str.slice(1), { cwd }),mid);
 		}
 		socket.on("runCommand", (cmd) => {
 			const parts = cmd.trim().split(" ");
@@ -148,66 +164,143 @@ app.prepare().then(() => {
 		//     "updatedAt": 1750757521996
 		// }
 		socket.on("moduleReq", async (data) => {
-			const { pid, mid } = data;
+			const { pid, mid, req } = data;
 			const ppath = path.join(parentDir, projectsSubdir, pid);
 			const modules = JSON.parse(fs.readFileSync(path.join(ppath, "modules.json"), { encoding: "utf-8" }));
-			let fin;
+			let status = (await getStatus(mid, modules[mid].status, ppath)).status;
+			let fin=0;
 			if (modules[mid]) {
 				const module = modules[mid];
-				switch (module.status) {
-					case "undeployed":
-						modules[mid].status="deploying"
-						fs.writeFileSync(path.join(ppath, "modules.json"), JSON.stringify(modules, null, 2), { encoding: "utf-8" });
-						socket.emit("statusModUpd",{pid,mid,status:modules[mid].status})
-						const { type, content, install, build, run } = module;
-						if (type == "git") {
+				const { type, content, install, build, run } = module;
+				kill[mid]=false
+				switch (req) {
+					case "Remove":
+						if (["undeployed", "running", "stopped", "exited", "paused"].includes(status)) {
+							updateStatus(pid, mid, modules, ppath, "removing");
+							await runCommand(`docker compose -f docker-compose-${mid}.yaml -p ${mid} down --rmi all`, ppath,mid);
+							updateStatus(pid, mid, modules, ppath, "unbuiltundeployed");
+						}
+						break;
+
+					case "Rebuild":
+						if (["undeployed"].includes(status)) {
+							try {
+								updateStatus(pid, mid, modules, ppath, "removing");
+								await runCommand(`docker compose -f docker-compose-${mid}.yaml -p ${mid} down --rmi all`, ppath,mid);
+							} catch {}
 							try {
 								fs.rmdirSync(path.join(ppath, mid), { recursive: true, force: true });
 							} catch {}
-							
-							fin = await comm(spawn("git", ["clone", content, mid], { cwd: ppath }));
-							if (fin == 1) {
-								let cmds = [];
-								fin = await comm(spawn("nixpacks", ["build", "./" + mid, "--name", mid], { cwd: ppath }));
-								if (fin == 1) {
-									fin = await comm(spawn("docker", ["compose", "-f", "docker-compose-" + mid + ".yaml", "-p", mid, "up", "-d"], { cwd: ppath }));
-								}
-								try {
-									fs.rmdirSync(path.join(ppath, mid), { recursive: true, force: true });
-								} catch {}
-							}
+							updateStatus(pid, mid, modules, ppath, "building");
+							fin=await runCommand(`git clone ${content} ${mid}`,ppath ,mid);
+							fin=fin==1?await runCommand(`nixpacks build ./${mid} --name  ${mid} ` , ppath,mid):-1
+							updateStatus(pid, mid, modules, ppath, fin==1?"undeployed":"unbuiltundeployed");
+							try {
+								fs.rmdirSync(path.join(ppath, mid), { recursive: true, force: true });
+							} catch {}
+
 						}
-						modules[mid].status="running"
-						fs.writeFileSync(path.join(ppath, "modules.json"), JSON.stringify(modules, null, 2), { encoding: "utf-8" });
-						socket.emit("statusModUpd",{pid,mid,status:modules[mid].status})
 						break;
-					case "deploying":
+
+					case "Deploy":
+						if (["undeployed"].includes(status)) {
+							updateStatus(pid, mid, modules, ppath, "deploying");
+							fin=await runCommand(`docker compose -f docker-compose-${mid}.yaml -p ${mid} up -d`, ppath,mid);
+							updateStatus(pid, mid, modules, ppath, fin==1?"running":"undeployed");
+						}
 						break;
-					case "created":
+
+					case "Redeploy":
+						if (["running", "stopped", "exited", "paused"].includes(status)) {
+							updateStatus(pid, mid, modules, ppath, "deploying");
+							fin=await runCommand(`docker compose -f docker-compose-${mid}.yaml -p ${mid} up -d`, ppath,mid);
+							updateStatus(pid, mid, modules, ppath, fin==1?"running":"undeployed");
+						}
 						break;
-					case "running":
-						modules[mid].status="stopping"
-						fs.writeFileSync(path.join(ppath, "modules.json"), JSON.stringify(modules, null, 2), { encoding: "utf-8" });
-						socket.emit("statusModUpd",{pid,mid,status:modules[mid].status})
-						await comm(spawn("docker", ["compose", "-f", "docker-compose-" + mid + ".yaml", "-p", mid, "stop"], { cwd: ppath }));
-						modules[mid].status="exited"
-						fs.writeFileSync(path.join(ppath, "modules.json"), JSON.stringify(modules, null, 2), { encoding: "utf-8" });
-						socket.emit("statusModUpd",{pid,mid,status:modules[mid].status})
+
+					case "Build & Deploy":
+						if (["unbuiltundeployed"].includes(status)) {
+							try {
+								fs.rmdirSync(path.join(ppath, mid), { recursive: true, force: true });
+							} catch {}
+							updateStatus(pid, mid, modules, ppath, "building");
+							fin=await runCommand(`git clone ${content} ${mid}`,ppath,mid);
+							fin=fin==1?await runCommand(`nixpacks build ./${mid} --name ${mid}` , ppath,mid):-1
+							updateStatus(pid, mid, modules, ppath, "deploying");
+							fin=fin==1?await runCommand(`docker compose -f docker-compose-${mid}.yaml -p ${mid} up -d`, ppath,mid):-1
+							updateStatus(pid, mid, modules, ppath, fin==1?"running":"unbuiltundeployed");
+							
+						}
 						break;
-					case "exited":
-						modules[mid].status="starting"
-						fs.writeFileSync(path.join(ppath, "modules.json"), JSON.stringify(modules, null, 2), { encoding: "utf-8" });
-						socket.emit("statusModUpd",{pid,mid,status:modules[mid].status})
-						await comm(spawn("docker", ["compose", "-f", "docker-compose-" + mid + ".yaml", "-p", mid, "start"], { cwd: ppath }));
-						modules[mid].status="running"
-						fs.writeFileSync(path.join(ppath, "modules.json"), JSON.stringify(modules, null, 2), { encoding: "utf-8" });
-						socket.emit("statusModUpd",{pid,mid,status:modules[mid].status})
+
+					case "Rebuild & Redeploy":
+						if (["running", "stopped", "exited", "paused"].includes(status)) {
+							try {
+								updateStatus(pid, mid, modules, ppath, "removing");
+								await runCommand(`docker compose -f docker-compose-${mid}.yaml -p ${mid} down --rmi all`, ppath,mid);
+							} catch {}
+							try {
+								fs.rmdirSync(path.join(ppath, mid), { recursive: true, force: true });
+							} catch {}
+							updateStatus(pid, mid, modules, ppath, "building");
+							fin=await runCommand(`git clone ${content} ${mid}`,ppath,mid);
+							fin=fin==1?await runCommand(`nixpacks build ./${mid} --name ${mid}` , ppath,mid):-1
+							updateStatus(pid, mid, modules, ppath, "deploying");
+							fin=fin==1?await runCommand(`docker compose -f docker-compose-${mid}.yaml -p ${mid} up -d`, ppath,mid):-1
+							updateStatus(pid, mid, modules, ppath, fin==1?"running":"unbuiltundeployed");
+							try {
+								fs.rmdirSync(path.join(ppath, mid), { recursive: true, force: true });
+							} catch {}
+						}
 						break;
-					case "removing":
+
+					case "Pause":
+						if (["running"].includes(status)) {
+							await runCommand(`docker compose -f docker-compose-${mid}.yaml -p ${mid} pause`, ppath,mid);
+							updateStatus(pid, mid, modules, ppath, "paused");
+						}
 						break;
-					default:
+
+					case "Resume":
+						if (["paused"].includes(status)) {
+							updateStatus(pid, mid, modules, ppath, "starting");
+							await runCommand(`docker compose -f docker-compose-${mid}.yaml -p ${mid} unpause`, ppath,mid);
+							updateStatus(pid, mid, modules, ppath, "running");
+						}
+						break;
+
+					case "Start":
+						if (["exited"].includes(status)) {
+							updateStatus(pid, mid, modules, ppath, "starting");
+							await runCommand(`docker compose -f docker-compose-${mid}.yaml -p ${mid} start`, ppath,mid);
+							updateStatus(pid, mid, modules, ppath, "running");
+						}
+						break;
+
+					case "Stop":
+						if (["running"].includes(status)) {
+							updateStatus(pid, mid, modules, ppath, "stopping");
+							await runCommand(`docker compose -f docker-compose-${mid}.yaml -p ${mid} stop`, ppath,mid);
+							updateStatus(pid, mid, modules, ppath, "exited");
+						}
+						break;
+
+					case "Restart":
+						if (["running", "stopped", "exited", "paused"].includes(status)) {
+							updateStatus(pid, mid, modules, ppath, "restarting");
+							await runCommand(`docker compose -f docker-compose-${mid}.yaml -p ${mid} restart`, ppath,mid);
+							updateStatus(pid, mid, modules, ppath, "running")
+						}
+						break;
+
+					case "Cancel":
+						if (["building", "deploying", "starting"].includes(status)) {
+							kill[mid]=true
+							updateStatus(pid,mid,modules,ppath,status=="starting"?"undeployed":"unbuiltundeployed")
+						}
 						break;
 				}
+				
 			}
 		});
 		socket.on("disconnect", () => {

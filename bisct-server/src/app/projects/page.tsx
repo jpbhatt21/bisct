@@ -6,7 +6,8 @@ import { useAtom } from "jotai";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { PlusIcon } from 'lucide-react';
-const DynamicProjects = dynamic(() =>import ("./content"),{ssr:false,loading: () => <div className="w-full h-full flex items-center justify-center">Loading...</div>});
+import SkeletonCard from '@/components/skeletons/ProjectCardSkeleton';
+const DynamicProjects = dynamic(() =>import ("./content"),{ssr:false,loading: () => <SkeletonCard/>});
 function Projects() {
 	const [projects, setProjects] = useAtom(projectsAtom);
 	const router = useRouter();
