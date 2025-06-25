@@ -4,7 +4,7 @@ import { addProject, projectsSubdir, parentDir } from "./constants";
 import { spawn } from "node:child_process";
 let contPath = path.join(parentDir,projectsSubdir)
 export function saveCompose(name:any,content:any){
-    let uuid= crypto.randomUUID()
+    let uuid= crypto.randomUUID().replaceAll("-","");
     fs.mkdirSync(path.join(contPath,uuid))    
     fs.writeFileSync(path.join(contPath,uuid,"docker-compose.yaml"), content, "utf8");
     addProject(uuid,{name})

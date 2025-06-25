@@ -2,7 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { svg } from "@/utils/vars";
+import { gemFont, lexFont, svg } from "@/utils/vars";
 import { useRouter } from "next/navigation";
 
 function SignUp() {
@@ -18,9 +18,9 @@ function SignUp() {
 	
 	return (
 		<>
-			<div className="fixed top-0 left-0 h-screen w-full bg-g0 flex items-center justify-center flex-col gap-2">
-				<label className="h-10 flex items-center gap-2 text-4xl top-1/4 -translate-y-1/2 fixed">{svg.cookie} bisct</label>
-				<div className="text-3xl">Sign{" "+query}</div>
+			<div className="fixed top-0 left-0 h-screen w-full bg-background flex items-center justify-center flex-col gap-2">
+				<label className={"h-10 flex items-center gap-2 text-4xl top-1/4 -translate-y-1/2 fixed "+gemFont.className}>{svg.cookie} bisct</label>
+				<div className={"text-3xl "+gemFont.className}>Sign{" "+query}</div>
 			<Input type="email" placeholder="email" />
 			<Input type="password" placeholder="password" />
 			<Button
@@ -45,7 +45,9 @@ function SignUp() {
 							}
 						});
 					}
-				}}>
+				}}
+				className={lexFont.className}
+				>
 				Submit
 			</Button>
 			</div>

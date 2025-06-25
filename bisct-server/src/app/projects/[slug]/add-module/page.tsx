@@ -1,36 +1,34 @@
 "use client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { socket } from "@/utils/vars";
+import { lexFont } from "@/utils/vars";
 import { Editor } from "@monaco-editor/react";
-import { usePathname } from "next/navigation";
-import { useEffect, useRef } from "react";
+import { usePathname, useRouter } from "next/navigation";
+// import { useEffect, useRef } from "react";
 let compose = "";
 let github = "";
 function AddModule() {
 	const pathname = usePathname();
-	useEffect(() => {
-		socket.on("comm", (data) => {
-			console.log(data);
-		});
-	}, []);
+	const pid = pathname.split("/")[2];
+	const router = useRouter();
+	
 	return (
 		<>
 			<div className="w-full max-w-160 h-full p-4 gap-2 flex flex-col overflow-hidden">
-				<label className="h-10 flex items-center gap-2 text-3xl m-4 self-center">Add Module</label>
-				<label className="text-2xl">Using Git </label>
-				<label className="flex items-center w-fit justify-center gap-1">
-					git clone{" "}
+				<label className={"h-10 flex items-center gap-2 text-3xl m-4 self-center "+lexFont.className}>Add Module</label>
+				<label className={"text-2xl "+lexFont.className}>Using Git </label>
+				<label className="flex items-center w-full justify-center gap-1">
+					<label className="min-w-fit">git clone</label>{" "}
 					<Input
 						onChange={(e) => {
 							github = e.currentTarget?.value || github;
 						}}
 						placeholder="https://repo.hub/usr/repo.git"
-						className="min-w-52"
+						className="w-full"
 					/>
 				</label>
-				<label className="text-2xl mt-4">Using Docker</label>
-				<label className="text-base text-g4">docker-compose.yaml</label>
+				<label className={"text-2xl mt-4 "+lexFont.className}>Using Docker</label>
+				<label className="text-base ">docker-compose.yaml</label>
 
 				<Editor
 					onChange={(e) => {
@@ -42,18 +40,31 @@ function AddModule() {
 						minimap: { enabled: false },
 						lineNumbersMinChars: 3,
 					}}
-					className="h-100 max-w-160"
+					className="h-9/10 max-w-160"
 					theme="vs-dark"
 				/>
 
 				<Button
-					className="w-32 min-h-10 text-lg self-end"
+					className={"w-32 min-h-10 text-lg self-end "+lexFont.className}
 					onClick={() => {
-						socket.emit("addModule", {
-							project: pathname.split("/")[2],
-							type: github ? "git" : "docker",
-							content: github || compose,
-						});
+						fetch("/api/projects/"+pid+"/modules/create", {
+							method: "POST",
+							body: JSON.stringify({
+								type: github ? "git" : "docker",
+								content: github || compose,
+							})
+						}).then(res=>{
+								if(res.status==200){
+									res.json().then(data=>{
+										router.push("/projects/"+pid+"/modules/"+data.id);
+									})
+								}
+							})
+						// socket.emit("addModule", {
+						// 	project: pathname.split("/")[2],
+						// 	type: github ? "git" : "docker",
+						// 	content: github || compose,
+						// });
 					}}>
 					Create
 				</Button>

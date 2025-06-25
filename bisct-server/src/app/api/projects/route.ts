@@ -1,14 +1,14 @@
 import { cookies } from "next/headers";
-import { verify } from "../constants";
-
+import { getProjects, verify } from "../constants";
 import { NextResponse } from "next/server";
 
-export async function POST(request: Request) {
-    let body = await request.json();
+export async function GET(request: Request) {
     let token = (await cookies()).get("token");
     let status = verify(token);
+    let message = "ok";
+    let projects = {};
     if (status == 200) {
-        // startContainer(saveCompose(body.name, body.content));
+       projects = getProjects();
     }
-    return NextResponse.json({ ok: "ok" }, { status: 200 });
+    return NextResponse.json({ message,projects }, { status: 200 });
 }

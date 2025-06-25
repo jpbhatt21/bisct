@@ -1,7 +1,5 @@
 import { NextResponse } from "next/server";
-import fs from "fs/promises";
 import jwt from "jsonwebtoken";
-import path from "path";
 import { cookies } from "next/headers";
 import { getProjects, getUsers, setUsers, verify } from "../constants";
 
@@ -12,20 +10,20 @@ export async function GET(request: Request) {
 	if (status == 200) {
 		projects = getProjects();
 		projects = Object.keys(projects).map((key) => {
-			return { id:key, ...projects[key] };
+			return { id: key, ...projects[key] };
 		});
 	}
 	return NextResponse.json({ auth: status == 200, projects: projects }, { status });
 }
 export async function POST(request: Request) {
 	let content = await request.json();
-	let users = getUsers();
-	let email = content.email;
+	let users: any = getUsers();
+	let email: any = content.email;
 	let pass = content.pass;
 	let user = users[email];
 	let response = NextResponse.json({ auth: "err" }, { status: 401 });
 	if ((user && !user.pass) || Object.keys(users).length == 0) {
-		let id = crypto.randomUUID();
+		let id = crypto.randomUUID().replaceAll("-", "");
 		const token = jwt.sign({ id, email }, process.env.JWT_SECRET as string, { expiresIn: "30d" });
 		users[email] = { id, pass, token };
 		setUsers(users);
