@@ -99,7 +99,7 @@
 	--color-selected: var(--selected);
 	--color-muted-success: var(--muted-success);
 	--color-success: var(--success);
-  --color-muted-warning: var(--muted-warning);
+	--color-muted-warning: var(--muted-warning);
 	--color-warning: var(--warning);
 	--color-muted-error: var(--muted-error);
 	--color-error: var(--error);
@@ -221,7 +221,28 @@ button{
   border-radius: 2px;
 
 } */
-
+.blink {
+	animation: blink 5s;
+}
+@keyframes blink {
+	0%{
+		color:#fff0;
+	}
+	20%,
+	40%,
+	60%,
+	80%,
+	100% {
+		color: var(--muted-foreground);
+	}
+	10%,
+	30%,
+	50%,
+	70%,
+	90% {
+		color: white;
+	}
+}
 :root {
 	--radius: 0.625rem;
 	--background: #15161b;
@@ -231,14 +252,14 @@ button{
 	--selected: #2d313d;
 	--success: #6d8f6a;
 	--muted-success: #2e3d2d;
-  --warning: #8e8f6a;
+	--warning: #8e8f6a;
 	--muted-warning: #3c3d2d;
 	--error: #8f6a6a;
 	--muted-error: #3d2d2d;
 	--card-foreground: #8f93a2;
 	--popover: #181a20;
 	--popover-foreground: #8f93a2;
-	--primary: #82aaff;
+	--primary: #8085ad;
 	--primary-foreground: #0f111a;
 	--secondary: #89ddff;
 	--secondary-foreground: #8f93a2;

@@ -60,7 +60,7 @@ function Card(project: any) {
 					/>
 				) : (
 					<div 
-					className={defFont.className+" px-3 py-1 text-xl font-semibold"}>{project.name}</div>
+					className={defFont.className+" px-3 py-1  w-full pointer-events-none overflow-hidden whitespace-nowrap text-ellipsis text-xl font-semibold"}>{project.name}</div>
 				))}
 			{project.desc &&
 				(project.id[0] == "-" ? (

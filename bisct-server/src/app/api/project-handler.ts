@@ -8,7 +8,7 @@ export function createNewProject(name: string, desc: string) {
 	fs.mkdirSync(projectPath, { recursive: true });
 	fs.writeFileSync(path.join(projectPath, ".env"), "URL=%uuid.localhost\nPORT=3000", { encoding: "utf-8" });
 	fs.writeFileSync(path.join(projectPath, "modules.json"), JSON.stringify({}), { encoding: "utf-8" });
-	fs.writeFileSync(path.join(projectPath, "docker-compose-default.yaml"), defaultCompose, { encoding: "utf-8" });
+	fs.writeFileSync(path.join(projectPath, "docker-compose.yaml"), defaultCompose, { encoding: "utf-8" });
 	addProject(uuid, { name, desc, createdAt: Date.now(), updatedAt: Date.now() });
 	return uuid;
 }

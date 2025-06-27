@@ -4,17 +4,20 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { gemFont, lexFont, svg } from "@/utils/vars";
 import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 
 function SignUp() {
 	const router = useRouter()
-	let query:string="In"
-	if (typeof window !== 'undefined') {
-		query=window.location.search.slice(1)
-		if(query !="up")
-			query="In"
+	const [query,setQuery] = useState("In");
+	useEffect(()=>{
+		if (typeof window !== 'undefined') {
+		let qry=window.location.search.slice(1)
+		if(qry !="up")
+			setQuery("In");
 		else
-		query="Up"
+			setQuery("Up");
 	}
+	},[])
 	
 	return (
 		<>

@@ -3,11 +3,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { lexFont, projectsAtom, socket } from "@/utils/vars";
 import { useAtom } from "jotai";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Overview from "./Overview";
 import { Button } from "@/components/ui/button";
-import { BanIcon, EllipsisVerticalIcon, PlayIcon, RefreshCwIcon, ReplyAllIcon, SquareIcon, StopCircleIcon, XIcon } from "lucide-react";
-import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent,  DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
+import { BanIcon, EllipsisVerticalIcon, PlayIcon, RefreshCwIcon, ReplyAllIcon, Save, SquareIcon, StopCircleIcon, XIcon } from "lucide-react";
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 
 const tabs = [
 	{ name: "Overview", url: "" },
@@ -124,7 +124,56 @@ const statusOptions = {
 		options: ["Stop", "Remove", "Restart", "Redeploy", "Rebuild & Redeploy"],
 	},
 };
+let interval: any = null;
+let is_changed = false;
+let original: any = {};
+let typeDefault={
+	git:{
+		content:{
+			source:"",
+			install:"",
+			build:"",
+			run:""
+		},
+		benv:{},
+		renv:{
+			URL:"%uuid.localhost",
+			PORT:3000,
+			NAME:"%uuid"
+		}
+	},
+	docker:{
+		content:{
+			services:{
+				app:{}
+			},
+			
+		}
+
+	}
+
+}
+function recurDiff(obj1: any, obj2: any, keys: string[] = Object.keys({ ...obj1, ...obj2 })) {
+	const ret: any = Object.fromEntries(keys.map((key) => [key, false]));
+	let val1, val2;
+	for (const key of keys) {
+		val1 = obj1[key];
+		val2 = obj2[key];
+
+		if (typeof val1 === "object" && typeof val2 === "object" && val1 !== null && val2 !== null) {
+			ret[key] = recurDiff(val1, val2);
+		} else {
+			ret[key] = val1 !== val2;
+			if (ret[key]) {
+				is_changed = true;
+			}
+		}
+	}
+	return ret;
+}
+
 function ModulesSlug() {
+	const [tries, setTries] = useState(0);
 	const pathname = usePathname();
 	const router = useRouter();
 	const query = "";
@@ -133,7 +182,18 @@ function ModulesSlug() {
 	const [module, setModule] = useState({} as any);
 	const status: keyof typeof statusOptions = module.status || "undeployed";
 	const [projects, setProjects] = useAtom(projectsAtom);
-	console.log(module, mid, query);
+	const [reReq, setReReq] = useState("");
+	const [modified,setModified] = useState({} as any)
+	const [enableSave, setEnableSave] = useState(false);
+	
+	useEffect(() => {
+		let config = module?.config || {};
+		is_changed = false;
+		if (config) {
+			setModified(recurDiff(original, module, Object.keys(config)))
+			setEnableSave(is_changed)
+		}
+	}, [module]);
 	useEffect(() => {
 		socket.on("statusModUpd", (status: any) => {
 			if (status.pid == pid && status.mid == mid) {
@@ -141,9 +201,23 @@ function ModulesSlug() {
 				setProjects((prevProjects: any) => prevProjects.map((project: any) => (project.id == pid ? { ...project, modules: project.modules.map((m: any) => (m.id == mid ? { ...m, status: status.status } : m)) } : project)));
 			}
 		});
+		return () => {
+			socket.off("statusModUpd");
+		};
+	}, []);
+	useEffect(() => {
+		if (tries > 5 || module.status) {
+			if (interval) {
+				clearInterval(interval);
+				interval = null;
+			}
+			console.log("Module loaded or max tries reached");
+			return;
+		}
 		const project = projects.find((p) => p.id === pid);
 		if (project) {
 			const mod = project?.modules?.find((m: any) => m.id === mid) || {};
+
 			setModule(mod);
 			document.title = mod.name || "Module";
 			document.querySelector("meta[name='description']")?.setAttribute("content", mod.desc || "No description available.");
@@ -153,22 +227,28 @@ function ModulesSlug() {
 						if (data.module) {
 							const mod = data.module;
 							setProjects((prevProjects) => prevProjects.map((project) => (project.id == pid ? (project.modules ? project.modules.map((module: any) => (module.id == mid ? mod : module)) : [mod]) : project)));
+							original = JSON.parse(JSON.stringify(mod))
 							setModule(mod);
 						}
 					});
 				}
 			});
-		} else {
 		}
-	}, []);
-
+		if (!interval)
+			interval = setInterval(() => {
+				setTries((prevTries) => prevTries + 1);
+			}, 1000);
+	}, [tries]);
+	let statusOpt = statusOptions[status];
+	if (module?.type != "git") statusOpt.options = statusOpt.options.filter((option: any) => option !== "Rebuild" && option !== "Rebuild & Redeploy" && option !== "Build & Deploy");
+	console.log(modified)
 	return (
 		<>
 			<div className="w-full h-28 flex items-center gap-2 pr-8 justify-between">
 				<div className=" flex flex-col gap-1">
 					{module.name ? (
 						<>
-							<label className={"h-10 flex items-center gap-2 text-3xl m-4 -mb-2 self-start " + lexFont.className} style={{ color: "var(" + statusOptions[status]?.titleColor || "" + ")" }}>
+							<label className={"h-10 flex items-center gap-2 text-3xl m-4 -mb-2 self-start " + lexFont.className} style={{ color: "var(" + statusOpt?.titleColor || "" + ")" }}>
 								{module.name}
 								<label className="text-sm">({module.status})</label>
 							</label>
@@ -186,37 +266,48 @@ function ModulesSlug() {
 						<>
 							<Button
 								className=" w-32 h-10"
+								disabled={enableSave ? false : true}
+								style={{
+									filter: enableSave ? "none" : "grayscale(0.5) brightness(0.5)",
+								}}>
+								<Save />
+								Save
+							</Button>
+							<Button
+								className=" w-32 h-10"
 								onClick={() => {
-									socket.emit("moduleReq", { pid, mid, req: statusOptions[status]?.button });
+									socket.emit("moduleReq", { pid, mid, req: statusOpt?.button });
 								}}
 								style={{
-									backgroundColor: "var(" + statusOptions[status]?.bgColor || "" + ")",
-									color: "var(" + statusOptions[status]?.color || "" + ")",
+									backgroundColor: "var(" + statusOpt?.bgColor || "" + ")",
+									color: "var(" + statusOpt?.color || "" + ")",
 								}}>
-								{statusOptions[status]?.icon || ""}
-								{statusOptions[status]?.button || "Disabled"}
+								{reReq && <label className="absolute ml-0 -mt-18 pointer-events-none text-muted-foreground text-xs blink ">{reReq} Required</label>}
+								{statusOpt?.icon || ""}
+								{statusOpt?.button || "Disabled"}
 							</Button>
-							{
-								statusOptions[status].options.length!==0 && <DropdownMenu>
-								<DropdownMenuTrigger className="min-w-5 h-10 bg-card rounded-sm hover:bg-hover duration-300">
-									<EllipsisVerticalIcon className="h-2/3 text-muted-foreground" />
-								</DropdownMenuTrigger>
-								<DropdownMenuContent className="w-24 mr-4">
-									{statusOptions[status]?.options?.map((option: string,i:number) => (
-										<>
-										<DropdownMenuItem
-											key={option}
-											className="text-sm"
-											onClick={() => {
-												socket.emit("moduleReq", { pid, mid, req: option });
-											}}>
-											{option}
-										</DropdownMenuItem>
-										{i+1!==statusOptions[status].options.length && <DropdownMenuSeparator/>}
-										</>
-									))}
-								</DropdownMenuContent>
-							</DropdownMenu>}
+							{statusOpt.options.length !== 0 && (
+								<DropdownMenu>
+									<DropdownMenuTrigger className="min-w-5 h-10 bg-card rounded-sm hover:bg-hover duration-300 outline-0 focus-visible:ring-ring/50 focus-visible:ring-3">
+										<EllipsisVerticalIcon className="h-2/3 text-muted-foreground" />
+									</DropdownMenuTrigger>
+									<DropdownMenuContent className="w-24 mr-4">
+										{statusOpt?.options?.map((option: string, i: number) => (
+											<>
+												<DropdownMenuItem
+													key={option}
+													className="text-sm"
+													onClick={() => {
+														socket.emit("moduleReq", { pid, mid, req: option });
+													}}>
+													{option}
+												</DropdownMenuItem>
+												{i + 1 !== statusOpt.options.length && <DropdownMenuSeparator />}
+											</>
+										))}
+									</DropdownMenuContent>
+								</DropdownMenu>
+							)}
 						</>
 					) : (
 						<div className="bg-hover w-32 h-10 rounded-sm" />
@@ -234,7 +325,7 @@ function ModulesSlug() {
 							))}
 						</TabsList>
 						<TabsContent value="">
-							<Overview module={module} />
+							<Overview module={module} setModule={setModule} modified={modified} />
 						</TabsContent>
 						<TabsContent value="?env"></TabsContent>
 						<TabsContent value="?term"></TabsContent>

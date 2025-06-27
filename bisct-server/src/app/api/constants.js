@@ -1,4 +1,5 @@
 import fs from "fs";
+import Parser from "docker-compose-parser";
 import path from "path";
 import jwt from "jsonwebtoken";
 import { spawn } from "child_process";
@@ -65,6 +66,7 @@ export async function test() {
 	try {
 		setProjects(JSON.parse(fs.readFileSync(path.join(parentDir, projectsSubdir, projectsFile), "utf8")));
 	} catch {
+		fs.mkdirSync(path.join(parentDir, projectsSubdir), { recursive: true });
 		fs.writeFileSync(path.join(parentDir, projectsSubdir, projectsFile), JSON.stringify({}), "utf8");
 	}
 	try {
@@ -75,17 +77,15 @@ export async function test() {
 	}
 	try {
 		fs.readFileSync(path.join(parentDir, "docker-compose.yaml"), "utf-8");
-		
 	} catch {
 		fs.writeFileSync(path.join(parentDir, "docker-compose.yaml"), traefikComposeYaml, "utf8");
-		
 	}
-	try{
+	try {
 		let cmdOP = await cmdOutput(spawn("docker", ["ps", "-a", "--filter", `name=bisct-traefik`, "--format", "json"], { cwd: ppath }));
 		if (cmdOP.length == 0 || JSON.parse(cmdOP).status !== "running") {
 			throw new Error("start traefik");
 		}
-	}catch{
+	} catch {
 		let proc = spawn("docker", ["compose", "up", "-d"], { cwd: parentDir });
 		proc.stdout.on("data", (data) => console.log(data.toString()));
 		proc.stderr.on("data", (data) => console.log(data.toString()));
@@ -121,8 +121,8 @@ export const setUsers = (val) => {
 
 export function verify(token) {
 	let status = 401;
+	const users = getUsers();
 	if (token) {
-		const users = getUsers();
 		let verify = jwt.verify(token.value, process.env.JWT_SECRET);
 		if (verify.exp * 1000 > Date.now()) {
 			if (users[verify.email] && users[verify.email].token == token.value) status = 200;
@@ -135,15 +135,55 @@ export function verify(token) {
 	}
 	return status;
 }
+export function parseIt(yamlString, uuid) {
+	let env = {};
+	const compose = Parser.parse(yamlString).json();
+	if (compose.services.traefik) {
+		return { yaml: "illegal name traefik", envs: {} };
+	}
+	let traefikExists = false;
+	Object.values(compose.services).forEach((x) => {
+		if (x.image && x.image.startsWith("traefik")) traefikExists = true;
+		x.labels &&
+			x.labels.forEach((x) => {
+				if (x.startsWith("traefik.")) traefikExists = true;
+			});
+		if (x.networks && x.networks.includes("traefik")) traefikExists = true;
+	});
+	if (!traefikExists) {
+		for (let key of Object.keys(compose.services)) {
+			compose.services[key].container_name=uuid+"-"+key
+			let service = compose.services[key];
+			if (service.ports) {
+				service.ports.forEach((x, i) => {
+					env[`URL_${key}_${i}`] = key + i + uuid + ".localhost";
+					env[`PORT_${key}_${i}`] = x.split(":").slice(-1)[0];
+					let arr = ["traefik.enable=true", `traefik.http.routers.${key}.rule=Host(\`\${URL_${key}_${i}}\`)`, `traefik.http.routers.${key}.entrypoints=web`, `traefik.http.services.${key}.loadbalancer.server.port=\${PORT_${key}_${i}}`];
+					compose.services[key].labels = compose.services[key].labels?.concat(arr) || arr;
+				});
+				compose.services[key].networks = compose.services[key].networks?.push("traefik") || ["traefik"];
+				let netTraf={traefik:{external:true}}
+				console.log(compose.networks)
+				compose.networks = compose.networks?{...compose.networks,...netTraf}:netTraf
+				console.log(compose.networks)
+			}
+		}
+	}
+	return {
+		yaml: Parser.parse(compose).text(),
+		env,
+		config:compose
+	};
+}
 export const defaultCompose = `version: '3.8'
 services:
   app:
-    image: %uuid
+    image: \${NAME}
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.app.rule=Host(\`%url\`)"
+      - "traefik.http.routers.app.rule=Host(\`\${URL}\`)"
       - "traefik.http.routers.app.entrypoints=web"
-      - "traefik.http.services.app.loadbalancer.server.port=%port"
+      - "traefik.http.services.app.loadbalancer.server.port=\${PORT}"
     networks:
       - traefik
 
@@ -190,7 +230,7 @@ export async function getStatus(mid, status, ppath) {
 	}));
 	if (cmdOP.length == 0) {
 		let data = await cmdOutput(spawn("docker", ["images", mid, "--format", "json"], { cwd: ppath }));
-		if (data.length == 0) {
+		if (data.length == 0 && status != "undeployed") {
 			console.log("bruh", status);
 			if (status != "building") status = "unbuiltundeployed";
 		} else {

@@ -1,8 +1,9 @@
 import { cookies } from "next/headers";
-import { getProjects, parentDir, projectsSubdir, verify } from "../../../../constants";
+import { getProjects, parentDir, parseIt, projectsSubdir, verify } from "../../../../constants";
 import { NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
+
 export async function POST(request: Request, { params }: any) {
 	params = await params;
 	let pid = params.slug;
@@ -18,9 +19,11 @@ export async function POST(request: Request, { params }: any) {
 				const uuid = crypto.randomUUID().replaceAll("-", "");
 				id = uuid;
 				const projectPath = path.join(parentDir, projectsSubdir, pid);
+				const modulePath = path.join(projectPath, uuid);
+				fs.mkdirSync(modulePath, { recursive: true });
 				const modules = fs.readFileSync(path.join(projectPath, "modules.json"), { encoding: "utf-8" });
 				const modulesJson = JSON.parse(modules);
-				const env = fs
+				const proj_env = fs
 					.readFileSync(path.join(projectPath, ".env"), { encoding: "utf-8" })
 					.split("\n")
 					.reduce((acc, line) => {
@@ -28,49 +31,52 @@ export async function POST(request: Request, { params }: any) {
 						acc[key] = value;
 						return acc;
 					}, {} as Record<string, string>);
-				modulesJson[uuid] = {
-					id: uuid,
-					status: "undeployed",
-					type: body.type,
-					content: body.content,
+				let env: any = {
+					URL: proj_env.URL.replaceAll("%uuid", uuid) || "localhost",
+					PORT: proj_env.PORT,
+					NAME: uuid,
+				};
+				let content: any = {
+					source: body.content,
 					install: "",
 					build: "",
 					run: "",
-					services: body.type == "git" ? ["app"] : [],
-					url: env.URL.replaceAll("%uuid", uuid),
-					port: "3000",
-					name:
-						body.type == "git"
-							? body.content.split("/").pop()?.replace(".git", "") || "Module"
-							: body.content
-									.split("\n")
-									.find((line: string) => line.startsWith("name:"))
-									?.split(":")[1]
-									?.trim() || "Module",
+				};
+				if (body.type == "git") {
+					fs.copyFileSync(path.join(projectPath, "docker-compose.yaml"), path.join(modulePath, "docker-compose.yaml"));
+				} else {
+					let { yaml, env, config } = parseIt(body.content, uuid);
+
+					fs.writeFileSync(path.join(modulePath, "docker-compose.yaml"), yaml, { encoding: "utf-8" });
+				}
+				modulesJson[uuid] = {
+					id: uuid,
+					name: "Module " + uuid,
 					desc: body.type == "git" ? "Module created from repo" : "Module created from docker-compose",
 					createdAt: Date.now(),
 					updatedAt: Date.now(),
+					status: body.type == "git" ? "unbuiltundeployed" : "undeployed",
+					type: body.type,
+					content,
+					benv: {},
+					renv: env,
+					services: body.type == "git" ? ["app"] : [],
+					config: {},
 				};
-				env[`URL${uuid}`] = env.URL.replaceAll("%uuid", uuid);
-				env[`PORT${uuid}`] = "3000";
-				let moduleCompose = "";
+				modulesJson[uuid].config = {
+					type: { lv: 3, cur: modulesJson[uuid].type },
+					content: { lv: 2, cur: modulesJson[uuid].content },
+					benv: { lv: 1, cur: modulesJson[uuid].benv },
+					renv: { lv: 1, cur: modulesJson[uuid].renv },
+				};
 				fs.writeFileSync(path.join(projectPath, "modules.json"), JSON.stringify(modulesJson, null, 2), { encoding: "utf-8" });
 				fs.writeFileSync(
-					path.join(projectPath, ".env"),
+					path.join(modulePath, ".env"),
 					Object.entries(env)
 						.map(([key, value]) => `${key}=${value}`)
 						.join("\n"),
 					{ encoding: "utf-8" }
 				);
-				if (body.type == "git") {
-					moduleCompose = fs
-						.readFileSync(path.join(projectPath, "docker-compose-default.yaml"), { encoding: "utf-8" })
-						.replaceAll("%url", "${URL" + uuid + "}")
-						.replaceAll("%port", "${PORT" + uuid + "}")
-						.replaceAll("%uuid", uuid);
-					fs.writeFileSync(path.join(projectPath, "docker-compose-" + uuid + ".yaml"), moduleCompose, { encoding: "utf-8" });
-				}
-
 				message = "Module created successfully.";
 				status = 200;
 			} else {
